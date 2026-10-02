@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Python fitting tools (their virtualenv ships third-party JS)
+    "tools/**",
   ]),
 ]);
 
