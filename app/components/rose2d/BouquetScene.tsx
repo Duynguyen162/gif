@@ -17,6 +17,7 @@ import {
   useMouse,
   useRoseTextures,
 } from "./Rose2DScene";
+import { mirror, type Pt, quad, ruffle } from "./outline";
 import { createStarTexture } from "./starTexture";
 
 // Everything here is laid out in "rose heights": 1 = the height of the rose
@@ -24,7 +25,7 @@ import { createStarTexture } from "./starTexture";
 // y points up.
 
 /** where the stem crosses the binding, in picture uv (v from the top) */
-const TIE = { u: 0.552, v: 0.72 };
+export const TIE = { u: 0.552, v: 0.72 };
 
 /**
  * One rose of the bunch. It turns about the tie point, then slides `lift`
@@ -53,32 +54,6 @@ const LAYER_SHIFT = 0.012;
 
 // --- outlines --------------------------------------------------------------
 
-type Pt = [number, number];
-
-function quad(a: Pt, c: Pt, b: Pt, n = 16): Pt[] {
-  return Array.from({ length: n + 1 }, (_, i) => {
-    const t = i / n;
-    const k = 1 - t;
-    return [k * k * a[0] + 2 * k * t * c[0] + t * t * b[0], k * k * a[1] + 2 * k * t * c[1] + t * t * b[1]];
-  });
-}
-
-/** a->b, bowed out to its left by `bow`, with `waves` soft scallops */
-function ruffle(a: Pt, b: Pt, waves: number, amp: number, bow = 0, n = 48): Pt[] {
-  const dx = b[0] - a[0];
-  const dy = b[1] - a[1];
-  const len = Math.hypot(dx, dy);
-  const nx = -dy / len;
-  const ny = dx / len;
-  return Array.from({ length: n + 1 }, (_, i) => {
-    const t = i / n;
-    const o = bow * 4 * t * (1 - t) + amp * Math.abs(Math.sin(t * Math.PI * waves));
-    return [a[0] + dx * t + nx * o, a[1] + dy * t + ny * o];
-  });
-}
-
-const mirror = (pts: Pt[]): Pt[] => pts.map(([x, y]) => [-x, y]);
-
 /** cellophane behind the heads, flaring out of the binding */
 const BACK_SHEET: Pt[] = [[-0.1, -0.02], ...ruffle([-0.62, 0.46], [0.62, 0.46], 7, 0.03, 0.3), [0.1, -0.02]];
 /** the two front sheets, folded across each other below the heads */
@@ -96,21 +71,21 @@ const SLEEVE: Pt[] = [
 ];
 
 // the bow, tied over the binding
-const LOOP_R: Pt[] = [...quad([0, 0], [0.1, 0.13], [0.2, 0.04]), ...quad([0.2, 0.04], [0.14, -0.06], [0, 0]).slice(1, -1)];
-const LOOP_L: Pt[] = mirror([...quad([0, 0], [0.09, 0.12], [0.18, 0.05]), ...quad([0.18, 0.05], [0.13, -0.05], [0, 0]).slice(1, -1)]);
-const TAIL_R: Pt[] = [
+export const LOOP_R: Pt[] = [...quad([0, 0], [0.1, 0.13], [0.2, 0.04]), ...quad([0.2, 0.04], [0.14, -0.06], [0, 0]).slice(1, -1)];
+export const LOOP_L: Pt[] = mirror([...quad([0, 0], [0.09, 0.12], [0.18, 0.05]), ...quad([0.18, 0.05], [0.13, -0.05], [0, 0]).slice(1, -1)]);
+export const TAIL_R: Pt[] = [
   ...quad([0.0, -0.01], [0.05, -0.1], [0.12, -0.26]),
   [0.09, -0.235],
   [0.075, -0.275],
   ...quad([0.075, -0.275], [0.03, -0.12], [-0.02, -0.02]).slice(1),
 ];
-const TAIL_L: Pt[] = mirror([
+export const TAIL_L: Pt[] = mirror([
   ...quad([0.0, -0.01], [0.03, -0.1], [0.08, -0.24]),
   [0.05, -0.22],
   [0.035, -0.255],
   ...quad([0.035, -0.255], [0.01, -0.12], [-0.02, -0.02]).slice(1),
 ]);
-const KNOT: Pt[] = Array.from({ length: 24 }, (_, i) => {
+export const KNOT: Pt[] = Array.from({ length: 24 }, (_, i) => {
   const a = (i / 24) * Math.PI * 2;
   return [Math.cos(a) * 0.04, Math.sin(a) * 0.034 - 0.005];
 });
@@ -125,7 +100,7 @@ const shadedSparkleFragment = sparkleFragment
   .replace("varying float vAlpha;", "varying float vAlpha;\nuniform float uShade;")
   .replace("t.a * vAlpha", "t.a * vAlpha * uShade");
 
-const flatVertex = /* glsl */ `
+export const flatVertex = /* glsl */ `
 varying vec2 vPos;
 void main() {
   vPos = position.xy;
@@ -133,7 +108,7 @@ void main() {
 }`;
 
 /** pearly cellophane: creases fanning out of the tie, a drifting rainbow sheen */
-const paperFragment = /* glsl */ `
+export const paperFragment = /* glsl */ `
 uniform float uTime;
 uniform vec2 uMouse;
 uniform vec3 uTint;
@@ -170,7 +145,7 @@ void main() {
 }`;
 
 /** satin and gilt: soft bands across the ribbon and the same sweeping light as the roses */
-const satinFragment = /* glsl */ `
+export const satinFragment = /* glsl */ `
 uniform float uTime;
 uniform vec2 uMouse;
 uniform vec3 uLight;
@@ -189,7 +164,7 @@ void main() {
 // --- pieces ----------------------------------------------------------------
 
 /** a band of `width` along a polyline, for the gilt edges */
-function strokeGeometry(pts: Pt[], width: number, closed: boolean) {
+export function strokeGeometry(pts: Pt[], width: number, closed: boolean) {
   const n = pts.length;
   const pos: number[] = [];
   const idx: number[] = [];
@@ -215,11 +190,11 @@ function strokeGeometry(pts: Pt[], width: number, closed: boolean) {
   return g;
 }
 
-function shapeGeometry(pts: Pt[]) {
+export function shapeGeometry(pts: Pt[]) {
   return new THREE.ShapeGeometry(new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y))));
 }
 
-type Clock = { time: number; mouse: THREE.Vector2 };
+export type Clock = { time: number; mouse: THREE.Vector2 };
 
 /** keeps a material's time and tilt in step with the bunch */
 function useAnimated(clock: RefObject<Clock>) {
@@ -234,7 +209,7 @@ function useAnimated(clock: RefObject<Clock>) {
 }
 
 /** slides a whole layer with the tilt, more for the layers nearer the viewer */
-function useLayerShift(depth: number, clock: RefObject<Clock>) {
+export function useLayerShift(depth: number, clock: RefObject<Clock>) {
   const ref = useRef<THREE.Group>(null);
   useFrame(() => {
     const m = clock.current.mouse;
