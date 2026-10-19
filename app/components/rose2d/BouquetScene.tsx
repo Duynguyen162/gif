@@ -1,11 +1,10 @@
-"use client";
+﻿"use client";
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import {
   ASSETS,
-  BACKDROP,
   type Meta,
   PARALLAX,
   roseFragment,
@@ -532,7 +531,6 @@ function Loaded({ still, insetTop, insetBottom }: { still: boolean; insetTop: nu
   }, []);
   return (
     <>
-      <color attach="background" args={[meta?.background ?? BACKDROP]} />
       {meta && tex && <Bouquet meta={meta} still={still} insetTop={insetTop} insetBottom={insetBottom} {...tex} />}
     </>
   );
@@ -549,8 +547,9 @@ export default function BouquetScene({
   insetBottom?: number;
 }) {
   return (
-    <Canvas flat orthographic dpr={[1, 2]} camera={{ position: [0, 0, 10], zoom: 1 }} gl={{ antialias: true, preserveDrawingBuffer: true }}>
+    <Canvas flat orthographic dpr={[1, 2]} camera={{ position: [0, 0, 10], zoom: 1 }} gl={{ antialias: true, alpha: true, preserveDrawingBuffer: true }} onCreated={({ gl }) => gl.setClearColor(0x000000, 0)}>
       <Loaded still={still} insetTop={insetTop} insetBottom={insetBottom} />
     </Canvas>
   );
 }
+

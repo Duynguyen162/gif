@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -15,13 +15,13 @@ export type Meta = {
 };
 
 export const ASSETS = "/rose2d";
-/** page colour until rose.json says otherwise; matches public/img/1.png */
-export const BACKDROP = "#1d1d1d";
 /** depth that stays put while tilting (roughly the outer petal ring) */
 export const PIVOT_DEPTH = 0.35;
 export const PARALLAX = 0.014;
 /** extra crispness when the picture is shown smaller than its 4× size */
 export const SHARPEN = 0.6;
+
+export type RoseLayout = "interactive" | "wish" | "background" | "showcase";
 
 export const roseVertex = /* glsl */ `
 varying vec2 vUv;
@@ -111,7 +111,10 @@ void main() {
 export function useMouse(still: boolean) {
   const target = useRef(new THREE.Vector2());
   useEffect(() => {
-    if (still) return;
+    if (still) {
+      target.current.set(0, 0);
+      return;
+    }
     const move = (e: PointerEvent) => {
       target.current.set((e.clientX / window.innerWidth) * 2 - 1, -((e.clientY / window.innerHeight) * 2 - 1));
     };
@@ -156,16 +159,43 @@ export function useRoseTextures(): Textures | null {
   return tex;
 }
 
-function Rose2D({ meta, still, rose, fx }: { meta: Meta; still: boolean } & Textures) {
+function Rose2D({ meta, still, layout, rose, fx }: { meta: Meta; still: boolean; layout: RoseLayout } & Textures) {
   const size = useThree((s) => s.size);
   const dpr = useThree((s) => s.viewport.dpr);
-  const target = useMouse(still);
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const target = useMouse(still || reduceMotion);
   const mouse = useRef(new THREE.Vector2());
   const roseMat = useRef<THREE.ShaderMaterial>(null);
   const sparkleMat = useRef<THREE.ShaderMaterial>(null);
+  const artwork = useRef<THREE.Group>(null);
 
-  // contain the picture in the viewport
-  const scale = Math.min(size.width / meta.width, size.height / meta.height) * 0.96;
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setReduceMotion(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
+  // Size and place the artwork inside WebGL instead of scaling the canvas.
+  // This keeps the baked backdrop edge-to-edge in every story scene.
+  const contain = Math.min(size.width / meta.width, size.height / meta.height) * 0.98;
+  const heightFit = size.height / meta.height;
+  const scale = layout === "interactive"
+    ? Math.max(contain, heightFit * 0.86)
+    : layout === "wish"
+      ? Math.max(contain, heightFit * 0.88)
+      : layout === "background"
+        ? Math.max(contain, heightFit * 0.94)
+        : contain * 1.02;
+  // Trang lời chúc: tăng 0.23 để hạ hoa xuống; giảm số này để nâng hoa lên.
+  const offsetY = layout === "wish"
+    ? -size.height * 0.23
+    : layout === "background"
+      ? -size.height * 0.15
+      : layout === "showcase"
+        ? 0
+        : -size.height * 0.06;
   const pw = meta.width * scale;
   const ph = meta.height * scale;
 
@@ -176,12 +206,12 @@ function Rose2D({ meta, still, rose, fx }: { meta: Meta; still: boolean } & Text
       uTime: { value: 0 },
       uMouse: { value: new THREE.Vector2() },
       uParallax: { value: PARALLAX },
-      uFxOn: { value: still ? 0 : 1 },
+      uFxOn: { value: still ? 0 : layout === 'showcase' ? 0.95 : 1 },
       uRes: { value: new THREE.Vector2(meta.width, meta.height) },
       uTexel: { value: new THREE.Vector2() },
       uSharpen: { value: SHARPEN },
     }),
-    [rose, fx, still, meta.width, meta.height],
+    [rose, fx, still, layout, meta.width, meta.height],
   );
 
   const sparkles = useMemo(() => {
@@ -228,14 +258,21 @@ function Rose2D({ meta, still, rose, fx }: { meta: Meta; still: boolean } & Text
   useEffect(() => () => sparkleUniforms.uTex.value.dispose(), [sparkleUniforms]);
 
   useFrame((state, delta) => {
-    const t = state.clock.elapsedTime;
+    const t = reduceMotion ? 0 : state.clock.elapsedTime;
     // ease toward the pointer; a slow idle sway when it rests
-    const idle = still ? 0 : 0.25;
+    const idle = still || reduceMotion ? 0 : 0.25;
     const goal = new THREE.Vector2(
       target.current.x + idle * Math.sin(t * 0.45),
       target.current.y + idle * 0.5 * Math.sin(t * 0.31 + 1),
     );
     mouse.current.lerp(goal, 1 - Math.exp(-delta * 4));
+    if (artwork.current) {
+      // A restrained, slow sway for the final close-up. The tiny angle keeps
+      // the baked backdrop stable while making the bouquet feel alive.
+      const sway = layout === 'showcase' && !reduceMotion ? Math.sin(t * 0.52) : 0;
+      artwork.current.rotation.z = sway * 0.006;
+      artwork.current.position.x = sway * size.width * 0.002;
+    }
     const ru = roseMat.current?.uniforms;
     if (ru) {
       ru.uTime.value = t;
@@ -252,7 +289,7 @@ function Rose2D({ meta, still, rose, fx }: { meta: Meta; still: boolean } & Text
   });
 
   return (
-    <group>
+    <group ref={artwork} position={[0, offsetY, 0]}>
       <mesh scale={[pw, ph, 1]}>
         <planeGeometry args={[1, 1]} />
         <shaderMaterial
@@ -282,7 +319,7 @@ function Rose2D({ meta, still, rose, fx }: { meta: Meta; still: boolean } & Text
   );
 }
 
-function Loaded({ still }: { still: boolean }) {
+function Loaded({ still, layout }: { still: boolean; layout: RoseLayout }) {
   const [meta, setMeta] = useState<Meta | null>(null);
   const tex = useRoseTextures();
   useEffect(() => {
@@ -292,16 +329,21 @@ function Loaded({ still }: { still: boolean }) {
   }, []);
   return (
     <>
-      <color attach="background" args={[meta?.background ?? BACKDROP]} />
-      {meta && tex && <Rose2D meta={meta} still={still} {...tex} />}
+      {meta && tex && <Rose2D meta={meta} still={still} layout={layout} {...tex} />}
     </>
   );
 }
 
-export default function Rose2DScene({ still = false }: { still?: boolean }) {
+export default function Rose2DScene({ still = false, layout = "interactive" }: { still?: boolean; layout?: RoseLayout }) {
   return (
-    <Canvas flat orthographic dpr={[1, 2]} camera={{ position: [0, 0, 10], zoom: 1 }} gl={{ antialias: true, preserveDrawingBuffer: true }}>
-      <Loaded still={still} />
+    <Canvas flat orthographic dpr={[1, 2]} camera={{ position: [0, 0, 10], zoom: 1 }} gl={{ antialias: true, alpha: true, preserveDrawingBuffer: true }} onCreated={({ gl }) => gl.setClearColor(0x000000, 0)}>
+      <Loaded still={still} layout={layout} />
     </Canvas>
   );
 }
+
+
+
+
+
+

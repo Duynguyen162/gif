@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
@@ -22,7 +22,6 @@ import { BACK_PETALS, BAND, END, HEART, PETAL, PETALS, pose, type Pose, SLEEVE, 
 import { type Pt } from "./outline";
 import {
   ASSETS,
-  BACKDROP,
   type Meta,
   PARALLAX,
   roseFragment,
@@ -89,7 +88,7 @@ void main() {
   float rays = pow(0.5 + 0.5 * sin(ang * 9.0 + uTime * 0.6), 6.0) * 0.6
              + pow(0.5 + 0.5 * sin(ang * 14.0 - uTime * 0.4 + 1.0), 8.0) * 0.4;
   float l = rays * exp(-r * 2.2) * uRays + exp(-r * 6.0) * uGlow + exp(-pow((r - uRing) * 14.0, 2.0)) * uRingAlpha;
-  gl_FragColor = vec4(vec3(1.0, 0.88, 0.62) * l, 1.0);
+  gl_FragColor = vec4(vec3(1.0, 0.88, 0.62) * l, clamp(l, 0.0, 1.0));
   #include <colorspace_fragment>
 }`;
 
@@ -595,10 +594,12 @@ type GiftProps = {
   freezeAt?: number;
   insetTop: number;
   insetBottom: number;
+  lowered: boolean;
   onDone?: () => void;
+  onReady?: () => void;
 } & Textures;
 
-function Gift({ meta, still, play, freezeAt, insetTop, insetBottom, onDone, ...tex }: GiftProps) {
+function Gift({ meta, still, play, freezeAt, insetTop, insetBottom, lowered, onDone, onReady, ...tex }: GiftProps) {
   const size = useThree((s) => s.size);
   const target = useMouse(still);
   const aspect = meta.width / meta.height;
@@ -606,6 +607,7 @@ function Gift({ meta, still, play, freezeAt, insetTop, insetBottom, onDone, ...t
   const openedAt = useRef<number | null>(null);
   const pending = useRef(false);
   const reported = useRef(false);
+  const readyReported = useRef(false);
   const [reduced, setReduced] = useState(false);
   const starTex = useMemo(() => createStarTexture(), []);
   useEffect(() => () => starTex.dispose(), [starTex]);
@@ -634,6 +636,8 @@ function Gift({ meta, still, play, freezeAt, insetTop, insetBottom, onDone, ...t
   const cy = -(box.min.y + bh / 2) * unit + (insetBottom - insetTop) / 2;
 
   const parcel = useRef<THREE.Group>(null);
+  const stage = useRef<THREE.Group>(null);
+  const stagePositioned = useRef(false);
   const back = useLayerShift(0.2, clock);
   const middle = useLayerShift(0.5, clock);
   const front = useLayerShift(0.85, clock);
@@ -651,11 +655,29 @@ function Gift({ meta, still, play, freezeAt, insetTop, insetBottom, onDone, ...t
     c.time = time;
     c.t = t;
     c.pose = pose(t, time, reduced);
+    if (stage.current) {
+      if (!stagePositioned.current) {
+        stage.current.position.set(cx, cy, 0);
+        stagePositioned.current = true;
+      }
+      const loweredBy = lowered ? Math.min(Math.max(size.height * 0.17, 90), 150) : 0;
+      const openingLift = play > 0 ? Math.min(Math.max(size.height * 0.04, 28), 34) : 0;
+      const targetY = cy - loweredBy + openingLift;
+      stage.current.position.x = cx;
+      stage.current.position.y = reduced
+        ? targetY
+        : THREE.MathUtils.damp(stage.current.position.y, targetY, 3.2, delta);
+    }
     if (parcel.current) setXform(parcel.current, c.pose.parcel);
     // ease toward the pointer; a slow idle sway when it rests
     const idle = still ? 0 : 0.25;
     const goal = new THREE.Vector2(target.current.x + idle * Math.sin(time * 0.45), target.current.y + idle * 0.5 * Math.sin(time * 0.31 + 1));
     c.mouse.lerp(goal, 1 - Math.exp(-delta * 4));
+    // Metadata, textures, shaders and canvas have now completed a real frame.
+    if (!readyReported.current) {
+      readyReported.current = true;
+      onReady?.();
+    }
     if (t !== null && t >= END && !reported.current) {
       reported.current = true;
       onDone?.();
@@ -663,7 +685,7 @@ function Gift({ meta, still, play, freezeAt, insetTop, insetBottom, onDone, ...t
   });
 
   return (
-    <group position={[cx, cy, 0]} scale={[unit, unit, 1]}>
+    <group ref={stage} scale={[unit, unit, 1]}>
       <group ref={parcel}>
         <group ref={back}>
           {PETALS.slice(0, BACK_PETALS).map((_, i) => (
@@ -709,11 +731,15 @@ type SceneProps = {
   /** screen pixels kept clear above and below the gift */
   insetTop?: number;
   insetBottom?: number;
+  /** move the gift down inside WebGL while keeping the canvas stationary */
+  lowered?: boolean;
   /** the show has finished and the rose is live */
   onDone?: () => void;
+  /** called after the fully-loaded scene has rendered its first frame */
+  onReady?: () => void;
 };
 
-function Loaded(props: Required<Pick<SceneProps, "still" | "play" | "insetTop" | "insetBottom">> & Pick<SceneProps, "freezeAt" | "onDone">) {
+function Loaded(props: Required<Pick<SceneProps, "still" | "play" | "insetTop" | "insetBottom" | "lowered">> & Pick<SceneProps, "freezeAt" | "onDone" | "onReady">) {
   const [meta, setMeta] = useState<Meta | null>(null);
   const tex = useRoseTextures();
   useEffect(() => {
@@ -723,16 +749,16 @@ function Loaded(props: Required<Pick<SceneProps, "still" | "play" | "insetTop" |
   }, []);
   return (
     <>
-      <color attach="background" args={[meta?.background ?? BACKDROP]} />
       {meta && tex && <Gift meta={meta} {...props} {...tex} />}
     </>
   );
 }
 
-export default function GiftScene({ still = false, play = 0, freezeAt, insetTop = 0, insetBottom = 0, onDone }: SceneProps) {
+export default function GiftScene({ still = false, play = 0, freezeAt, insetTop = 0, insetBottom = 0, lowered = false, onDone, onReady }: SceneProps) {
   return (
-    <Canvas flat orthographic dpr={[1, 2]} camera={{ position: [0, 0, 10], zoom: 1 }} gl={{ antialias: true, preserveDrawingBuffer: true }}>
-      <Loaded still={still} play={play} freezeAt={freezeAt} insetTop={insetTop} insetBottom={insetBottom} onDone={onDone} />
+    <Canvas flat orthographic dpr={[1, 2]} camera={{ position: [0, 0, 10], zoom: 1 }} gl={{ antialias: true, alpha: true, preserveDrawingBuffer: true }} onCreated={({ gl }) => gl.setClearColor(0x000000, 0)}>
+      <Loaded still={still} play={play} freezeAt={freezeAt} insetTop={insetTop} insetBottom={insetBottom} lowered={lowered} onDone={onDone} onReady={onReady} />
     </Canvas>
   );
 }
+

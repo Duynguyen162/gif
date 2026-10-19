@@ -1,1 +1,0 @@
-Đổi ảnh khác sau này: thay public/img/1.png rồi chạy cd tools/rose-fit && uv run make2d.py. Màu nền, mask và vị trí sao sẽ tự tính lại.
