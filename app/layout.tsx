@@ -23,6 +23,11 @@ const beVietnamPro = Be_Vietnam_Pro({
 export const metadata: Metadata = {
     title: "Một bông hoa dành cho bạn",
     description: "Một món quà nhỏ cho ngày 20/10.",
+    icons: {
+        icon: "/rose.png",
+        shortcut: "/rose.png",
+        apple: "/rose.png",
+    },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
