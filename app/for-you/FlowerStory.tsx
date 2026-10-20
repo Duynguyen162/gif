@@ -222,7 +222,7 @@ export default function FlowerStory() {
                 <Petals />
                 <div className={styles.welcomeGlow} aria-hidden='true' />
                 <div className={styles.welcomeContent}>
-                    <span className={styles.mark} aria-hidden='true'>♡</span>
+                    <span className={styles.mark} aria-hidden='true'>✦</span>
                     <p className={styles.kicker}>20 · 10 · 2026</p>
                     <h1>Một món quà nhỏ<br />đang chờ bạn</h1>
                     <p>Chạm để bắt đầu và nghe một chút nhạc nhé.</p>
